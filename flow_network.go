@@ -60,6 +60,7 @@ func newEdge(fromID, toID int) edge {
 		to:   internalID(toID),
 	}
 }
+
 func fromSource(toID int) edge {
 	return edge{
 		from: sourceID,
@@ -97,6 +98,7 @@ const sinkID = 1
 
 // NewFlowNetwork constructs a new graph, preallocating enough memory for the provided number of nodes.
 func NewFlowNetwork(numNodes int) FlowNetwork {
+	// TODO: add 'manual source' and 'manual sink' to the constructor here; don't do that thing in addEdge.
 	result := FlowNetwork{
 		numNodes:      numNodes,
 		adjacencyList: make([]map[int]struct{}, numNodes+2),
@@ -153,8 +155,7 @@ func (g FlowNetwork) residual(e edge) int64 {
 	return g.capacity[e] - g.preflow[e]
 }
 
-// AddNode adds a new node to the graph and returns its ID, which must be used in subsequent
-// calls.
+// AddNode adds a new node to the graph and returns its ID, which must be used in subsequent calls.
 func (g *FlowNetwork) AddNode() int {
 	id := g.numNodes
 	g.numNodes++
@@ -205,19 +206,19 @@ func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
 
 	// auto-remove any connections from/to the source/sink pseudonodes (if they're managed automatically)
 	if !g.manualSource {
-		delete(g.capacity, edge{sourceID, toID + 2})
-		delete(g.adjacencyList[sourceID], toID+2)
+		delete(g.capacity, fromSource(toID))
+		delete(g.adjacencyList[sourceID], internalID(toID))
 	}
 	if !g.manualSink {
-		delete(g.capacity, edge{fromID + 2, sinkID})
-		delete(g.adjacencyList[fromID+2], sinkID)
+		delete(g.capacity, toSink(fromID))
+		delete(g.adjacencyList[internalID(fromID)], sinkID)
 	}
 	return nil
 }
 
 func (g *FlowNetwork) addEdge(fromID, toID int, capacity int64) {
-	g.capacity[edge{fromID + 2, toID + 2}] = capacity
-	g.adjacencyList[fromID+2][toID+2] = struct{}{}
+	g.capacity[newEdge(fromID, toID)] = capacity
+	g.adjacencyList[internalID(fromID)][internalID(toID)] = struct{}{}
 
 }
 
@@ -273,6 +274,18 @@ func (g *FlowNetwork) PushRelabel() {
 			p--
 		}
 	}
+}
+
+// Label returns the current label of provided node. It is intended for users who are implementing
+// their own push-relabel based heuristics.
+func (g *FlowNetwork) Label(nodeID int) int {
+	return g.label[internalID(nodeID)]
+}
+
+// Discharge is exposed to allow users to implement their own push-relabeling variants. The order in which
+// nodes are discharged has a big impact on the practical performance of the algorithm.
+func (g *FlowNetwork) Discharge(nodeID int) {
+	g.discharge(internalID(nodeID))
 }
 
 // push moves as much excess flow across the provided edge as possible without violating the edge's capacity
@@ -347,7 +360,7 @@ func (g *FlowNetwork) reset() {
 		g.label[internalID(i)] = 0
 	}
 	for e := range g.preflow {
-		g.preflow[e] = 0
+		delete(g.preflow, e)
 	}
 	// set the capacity, excess, and flow for edges leading out from from source; using the max outgoing capacity of any node adjacent to source.
 	totalCapacity := int64(0)
