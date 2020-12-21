@@ -8,7 +8,7 @@ import (
 
 // Demonstrates how to use a flow network to compute max-flow.
 func ExampleFlowNetwork() {
-	fn := flownet.NewFlowNetwork(6) // allocates a flow network with nodeIDs 0, 1, ..., 5
+	fn := flownet.NewFlowNetwork(6, true, true) // allocates a flow network with nodeIDs 0, 1, ..., 5
 
 	type edge struct {
 		source, target int

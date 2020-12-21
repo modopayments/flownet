@@ -8,7 +8,7 @@ import (
 )
 
 func TestAddEdge(t *testing.T) {
-	g := flownet.NewFlowNetwork(5)
+	g := flownet.NewFlowNetwork(5, true, true)
 	tests := []struct {
 		fromID, toID int
 		capacity     int64
@@ -39,7 +39,12 @@ func TestAddEdge(t *testing.T) {
 
 func TestSanityAllFlowNetworks(t *testing.T) {
 	visitAllInstances(t, FlowInstances, func(t *testing.T, path string, instance TestInstance) error {
-		graph := flownet.NewFlowNetwork(instance.numNodes)
+		var graph flownet.FlowNetwork
+		if strings.Contains(path, "cycles") {
+			graph = flownet.NewFlowNetwork(instance.numNodes, false, false)
+		} else {
+			graph = flownet.NewFlowNetwork(instance.numNodes, true, true)
+		}
 		for edge, cap := range instance.capacities {
 			if err := graph.AddEdge(edge.from, edge.to, cap); err != nil {
 				t.Error(err)
@@ -68,7 +73,7 @@ func TestSanityAllFlowNetworks(t *testing.T) {
 
 func TestTopSortAllFlowNetworks(t *testing.T) {
 	visitAllInstances(t, FlowInstances, func(t *testing.T, path string, instance TestInstance) error {
-		graph := flownet.NewFlowNetwork(instance.numNodes)
+		graph := flownet.NewFlowNetwork(instance.numNodes, true, true)
 		for edge, cap := range instance.capacities {
 			if err := graph.AddEdge(edge.from, edge.to, cap); err != nil {
 				t.Error(err)

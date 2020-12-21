@@ -42,10 +42,10 @@ type FlowNetwork struct {
 	label []int
 	// seen stores the last node seen by each node for use during the discharge operation.
 	seen []int
-	// manualSource is true only if the programmer has manually added an edge leaving flownet.Source.
-	manualSource bool
-	// manualSink is true only if the programmer has manually added an edge entering flownet.Sink.
-	manualSink bool
+	// autoSource is true only if the programmer has manually added an edge leaving flownet.Source.
+	autoSource bool
+	// autoSink is true only if the programmer has manually added an edge entering flownet.Sink.
+	autoSink bool
 }
 
 // Edge represents a directed edge from the node with ID 'from' to the node with ID 'to'.
@@ -97,7 +97,11 @@ const sourceID = 0
 const sinkID = 1
 
 // NewFlowNetwork constructs a new graph, preallocating enough memory for the provided number of nodes.
-func NewFlowNetwork(numNodes int) FlowNetwork {
+// If the autoSource or autoSink flags are set, nodes are automatically connected to the source/sink by
+// default. When autoSource is enabled, nodes will remain connected to the source until their first
+// first incoming edge is added. When autoSink is enabled, nodes remain connected to the sink until their
+// first outgoing edge is added.
+func NewFlowNetwork(numNodes int, autoSource, autoSink bool) FlowNetwork {
 	// TODO: add 'manual source' and 'manual sink' to the constructor here; don't do that thing in addEdge.
 	result := FlowNetwork{
 		numNodes:      numNodes,
@@ -107,6 +111,8 @@ func NewFlowNetwork(numNodes int) FlowNetwork {
 		excess:        make([]int64, numNodes+2),
 		label:         make([]int, numNodes+2),
 		seen:          make([]int, numNodes+2),
+		autoSource:    autoSource,
+		autoSink:      autoSink,
 	}
 	result.adjacencyList[sourceID] = make(map[int]struct{})
 	result.adjacencyList[sinkID] = make(map[int]struct{})
@@ -114,8 +120,12 @@ func NewFlowNetwork(numNodes int) FlowNetwork {
 	for i := 0; i < numNodes; i++ {
 		result.adjacencyList[internalID(i)] = make(map[int]struct{})
 
-		result.addEdge(Source, i, math.MaxInt64)
-		result.addEdge(i, Sink, math.MaxInt64)
+		if autoSource {
+			result.addEdge(Source, i, math.MaxInt64)
+		}
+		if autoSink {
+			result.addEdge(i, Sink, math.MaxInt64)
+		}
 	}
 	return result
 }
@@ -163,10 +173,10 @@ func (g *FlowNetwork) AddNode() int {
 	g.label = append(g.label, 0)
 	g.seen = append(g.seen, 0)
 	g.adjacencyList = append(g.adjacencyList, make(map[int]struct{}))
-	if !g.manualSource {
+	if g.autoSource {
 		g.addEdge(Source, id, math.MaxInt64)
 	}
-	if !g.manualSink {
+	if g.autoSink {
 		g.addEdge(id, Sink, math.MaxInt64)
 	}
 	return id
@@ -194,22 +204,16 @@ func (g *FlowNetwork) AddEdge(fromID, toID int, capacity int64) error {
 	if capacity < 0 {
 		return fmt.Errorf("capacities must be non-negative")
 	}
-	if fromID == Source {
-		g.enableManualSource()
-	}
-	if toID == Sink {
-		g.enableManualSink()
-	}
 
 	// actually set the capacity! woo! (finally)
 	g.addEdge(fromID, toID, capacity)
 
 	// auto-remove any connections from/to the source/sink pseudonodes (if they're managed automatically)
-	if !g.manualSource {
+	if g.autoSource && fromID != Source {
 		delete(g.capacity, fromSource(toID))
 		delete(g.adjacencyList[sourceID], internalID(toID))
 	}
-	if !g.manualSink {
+	if g.autoSink && toID != Sink {
 		delete(g.capacity, toSink(fromID))
 		delete(g.adjacencyList[internalID(fromID)], sinkID)
 	}
@@ -259,7 +263,7 @@ func (g *FlowNetwork) SetNodeOrder(nodeIDs []int) error {
 func (g *FlowNetwork) PushRelabel() {
 	// implementation based heavily on these notes:
 	// https://www.ccs.neu.edu/home/vip/teach/Algorithms/11_graphsC_networks/push_relabel.pdf
-	g.reset() // TODO: this makes it impossible to 'reflow'.
+	g.reset()
 	nodeQueue := append(make([]int, 0, g.numNodes), g.nodeOrder...)
 	p := len(nodeQueue) - 1
 	for p >= 0 {
@@ -382,30 +386,6 @@ func (g *FlowNetwork) reset() {
 		g.preflow[edge{sourceID, u}] = outgoingCapacity
 	}
 	g.excess[sourceID] = -totalCapacity
-}
-
-func (g *FlowNetwork) enableManualSource() {
-	if g.manualSource {
-		return
-	}
-	g.manualSource = true
-	// disconnect all nodes from source and sink; programmer wants to do it themselves.
-	for i := 2; i < g.numNodes+2; i++ {
-		delete(g.capacity, edge{sourceID, i})
-		delete(g.adjacencyList[sourceID], i)
-	}
-}
-
-func (g *FlowNetwork) enableManualSink() {
-	if g.manualSink {
-		return
-	}
-	g.manualSink = true
-	// disconnect all nodes from source and sink; programmer wants to do it themselves.
-	for i := 2; i < g.numNodes+2; i++ {
-		delete(g.capacity, edge{i, sinkID})
-		delete(g.adjacencyList[i], sinkID)
-	}
 }
 
 // TopSort returns a topological ordering of the nodes in the provided FlowNetwork, starting from the

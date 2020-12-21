@@ -32,7 +32,7 @@ type Circulation struct {
 // NewCirculation constructs a new graph allocating initial capacity for the provided number of nodes.
 func NewCirculation(numNodes int) Circulation {
 	return Circulation{
-		FlowNetwork: NewFlowNetwork(numNodes),
+		FlowNetwork: NewFlowNetwork(numNodes, true, true),
 		// demand maps from edges (using external nodeIDs) to the demand along each edge.
 		demand: make(map[edge]int64),
 		// nodeDemand maps from external nodeIDs to the demand for each node.
